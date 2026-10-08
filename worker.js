@@ -10,18 +10,20 @@ function candidate(mail) {
  const from = mail.from?.value?.[0];
  const email = from?.address?.trim().toLowerCase();
  if (!email || localDomains.has(email.split('@')[1])) return { reason: 'belső / hiányzó feladó' };
- if (/no-?reply|newsletter|notification|mailer-daemon|postmaster|bounce/i.test(email)) return { reason: 'automata feladó' };
+ if (/no-?reply|newsletter|notification|mailer-daemon|postmaster|bounce|ertesites|értesítés|ertesito|notification|automata|robot/i.test(email)) return { reason: 'automata feladó' };
  if (['list-id','list-unsubscribe','auto-submitted'].some(k=>mail.headers?.has(k))) return { reason: 'hírlevél / automata fejléc' };
  const body = (mail.text || '').split(/\n(?:From:|Feladó:|On .+wrote:|-----Original Message-----)/i)[0];
  const signature = body.split('\n').slice(-18).join('\n');
  const phones = [...new Set(findPhoneNumbersInText(signature,'HU').filter(v=>v.number.isValid()).map(v=>v.number.number))];
  if (phones.length !== 1) return { reason: phones.length===0 ? 'nem találtunk telefonszámot' : 'több telefonszám' };
  const name = (from.name||'').trim();
+ if (/(?:értesítő|ertesito|értesítés|ertesites|notification|automated|automata|ügyfélszolgálat|ugyfelszolgalat|customer service|support|logistics|webshop|team|csapat|system|rendszer)/i.test(name)) return { reason: 'nem személy / szervezeti feladó' };
  if (!/^[\p{L}][\p{L}\p{M} .'-]{3,89}$/u.test(name) || name.split(/\s+/).length < 2) return { reason: 'nem megbízható név' };
  const companyLines=signature.split('\n').map(line=>line.trim()).filter(Boolean);
  const companyPattern=/\b(?:Kft\.?|Zrt\.?|Nyrt\.?|Bt\.?|Kkt\.?|Ltd\.?|LLC|Inc\.?|GmbH|AG|S\.?r\.?l\.?)\b/i;
  const companyCandidates=companyLines.filter(line=>line.length<=100 && companyPattern.test(line) && !line.includes('@') && !/https?:\/\/|www\.|\+?\d[\d\s()-]{7,}/i.test(line));
- const company=[...new Set(companyCandidates)].length===1 ? companyCandidates[0] : '';
+ const normalizedCompanies=[...new Set(companyCandidates.map(line=>line.replace(/^[\s\u2013\u2014\-:|]+/, '').trim()).filter(Boolean))];
+ const company=normalizedCompanies.length===1 ? normalizedCompanies[0] : '';
  return { contact: {name,email,phone:phones[0],company} };
 }
 export async function scan() {
