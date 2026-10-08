@@ -2,7 +2,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { findPhoneNumbersInText } from 'libphonenumber-js';
 
-const results = { lastRun: null, error: null, checked: 0, candidates: [], running: false };
+const results = { lastRun: null, lastAttempt: null, lastConnected: null, connection: 'not_configured', error: null, checked: 0, candidates: [], running: false };
 const localDomains = new Set(['laava.hu', 'matezz.hu', 'matezz.ro', 'matchai.hu']);
 const html = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function status() { return { ...results, candidates: [...results.candidates] }; }
@@ -21,11 +21,16 @@ function candidate(mail) {
  return {name,email,phone:phones[0]};
 }
 export async function scan() {
- if (results.running || !process.env.IMAP_HOST || !process.env.IMAP_USER || !process.env.IMAP_PASSWORD) return;
- results.running=true; results.error=null;
+ if (results.running) return;
+ results.lastAttempt = new Date().toISOString();
+ if (!process.env.IMAP_HOST || !process.env.IMAP_USER || !process.env.IMAP_PASSWORD) {
+  results.connection='not_configured'; results.error='Hiányzó IMAP_HOST, IMAP_USER vagy IMAP_PASSWORD beállítás.'; return;
+ }
+ results.running=true; results.error=null; results.connection='connecting';
  const client = new ImapFlow({host:process.env.IMAP_HOST,port:Number(process.env.IMAP_PORT||993),secure:true,auth:{user:process.env.IMAP_USER,pass:process.env.IMAP_PASSWORD},logger:false});
  try {
   await client.connect();
+  results.connection='connected'; results.lastConnected=new Date().toISOString();
   const lock=await client.getMailboxLock('INBOX',{readOnly:true});
   try {
    const count=client.mailbox.exists;
@@ -43,10 +48,12 @@ export async function scan() {
    results.candidates=items.slice(-30);
   } finally { lock.release(); }
   results.lastRun=new Date().toISOString();
- } catch(e) {results.error=String(e.message||e).slice(0,180);console.error('IMAP scan error:',results.error);}
+ } catch(e) {results.connection='error'; results.error=String(e.message||e).slice(0,180);console.error('IMAP scan error:',results.error);}
  finally {results.running=false;try{await client.logout()}catch{}}
 }
 export function dashboard() {
- const {lastRun,error,checked,candidates,running}=results;
- return '<!doctype html><html lang="hu"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CEO Contacts Sync</title><style>body{font-family:system-ui;margin:0;background:#f6f7f8;color:#17202a}main{max-width:850px;margin:40px auto;padding:24px;background:white;border-radius:16px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:12px;border-bottom:1px solid #ddd}small{color:#65707b}</style><main><h1>CEO Contacts Sync</h1><p><strong>DRY RUN</strong> · csak olvasás, nincs névjegymentés</p><p>Utolsó ellenőrzés: '+html(lastRun||'még nincs')+' · Üzenetek: '+checked+' · Feldolgozás: '+(running?'folyamatban':'készen')+'</p><p>'+html(error||'')+'</p><h2>Lehetséges névjegyek</h2><table><tr><th>Név</th><th>Email</th><th>Telefon</th></tr>'+candidates.map(c=>'<tr><td>'+html(c.name)+'</td><td>'+html(c.email)+'</td><td>'+html(c.phone)+'</td></tr>').join('')+'</table><p><small>A találatok csak előnézetek, azonosításuk ellenőrzést igényel.</small></p></main></html>';
+ const {lastRun,lastAttempt,lastConnected,connection,error,checked,candidates,running}=results;
+ const labels={not_configured:'Nincs beállítva',connecting:'Csatlakozás folyamatban',connected:'Sikeres IMAP-kapcsolat',error:'IMAP-kapcsolat / ellenőrzés sikertelen'};
+ const tone=connection==='connected'?'#147d46':connection==='error'?'#bd3030':'#805d12';
+ return '<!doctype html><html lang="hu"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>CEO Contacts Sync</title><style>body{font-family:system-ui;margin:0;background:#f6f7f8;color:#17202a}main{max-width:850px;margin:40px auto;padding:24px;background:white;border-radius:16px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:12px;border-bottom:1px solid #ddd}small{color:#65707b}.status{border:1px solid #ddd;border-left:5px solid '+tone+';border-radius:10px;padding:16px;margin:20px 0}.status strong{color:'+tone+'}td{overflow-wrap:anywhere}</style><main><h1>CEO Contacts Sync</h1><p><strong>DRY RUN</strong> · csak olvasás, nincs névjegymentés</p><section class="status" aria-live="polite"><strong>IMAP: '+html(labels[connection]||connection)+'</strong><p>Utolsó csatlakozási próbálkozás: '+html(lastAttempt||'még nem történt')+'</p><p>Utolsó sikeres kapcsolódás: '+html(lastConnected||'még nem történt')+'</p>'+(error?'<p>Hiba: '+html(error)+'</p>':'')+'</section><p>Utolsó sikeres INBOX-ellenőrzés: '+html(lastRun||'még nincs')+' · Átvizsgált levelek: '+checked+' · Feldolgozás: '+(running?'folyamatban':'készen')+'</p><h2>Lehetséges névjegyek</h2><table><tr><th>Név</th><th>Email</th><th>Telefon</th></tr>'+candidates.map(c=>'<tr><td>'+html(c.name)+'</td><td>'+html(c.email)+'</td><td>'+html(c.phone)+'</td></tr>').join('')+'</table><p><small>Az oldal 30 másodpercenként frissül. A találatok csak előnézetek.</small></p></main></html>';
 }
