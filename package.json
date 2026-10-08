@@ -1,6 +1,6 @@
 {
   "name": "laava-ceo-contacts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,5 +9,10 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js"
+  },
+  "dependencies": {
+    "imapflow": "^1.0.195",
+    "mailparser": "^3.7.2",
+    "libphonenumber-js": "^1.11.14"
   }
 }
