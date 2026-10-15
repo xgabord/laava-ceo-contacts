@@ -45,6 +45,10 @@ function doPost(e) {
     const secret=PropertiesService.getScriptProperties().getProperty('CEO_SYNC_SECRET');
     if(!secret||secret.length<32||data.secret!==secret)return out_({ok:false,error:'unauthorized'});
     if(!lock.tryLock(25000))return out_({ok:false,error:'busy'});
+    if(data.action==='ping'){
+      const info=api_('contactGroups?pageSize=1');
+      return out_({ok:true,status:'connected',peopleApi:true});
+    }
     const c=data.contact||{};
     const email=String(c.email||'').trim().toLowerCase();
     const phone=e164_(c.phone);
