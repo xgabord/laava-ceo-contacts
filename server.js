@@ -26,6 +26,30 @@ const server=http.createServer(async (req,res)=>{
   res.writeHead(process.env.ADMIN_PASSWORD?401:503,{'content-type':'text/plain','WWW-Authenticate':'Basic realm="CEO Contacts"'});
   res.end('Administrator credentials required');return;
  }
+ if(url.pathname==='/google-diagnostics' && req.method==='GET'){
+  const endpoint=process.env.GCONTACTS_SCRIPT_URL||'';
+  const secret=process.env.GCONTACTS_SCRIPT_SECRET||'';
+  const report={syncEnabled:process.env.GCONTACTS_SYNC_ENABLED==='true',urlConfigured:/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint),secretConfigured:secret.length>=32};
+  if(report.urlConfigured&&report.secretConfigured){
+   try{
+    const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'ping',secret}),signal:AbortSignal.timeout(20000)});
+    report.googleHttpStatus=response.status;
+    report.googleHost=new URL(response.url).hostname;
+    report.googleContentType=response.headers.get('content-type')||'unknown';
+    const raw=await response.text();
+    try{
+     const data=JSON.parse(raw);
+     report.googleResult={ok:!!data.ok,status:data.status||null,error:data.error||null};
+    }catch{
+     report.googleResult={ok:false,error:'Google did not return JSON',htmlResponse:/<!doctype html|<html/i.test(raw),loginPage:/sign in|bejelentkez|accounts.google.com/i.test(raw)};
+    }
+   }catch(err){report.googleError=String(err.message||err).slice(0,140)}
+  }
+  res.writeHead(200,{'content-type':'text/html; charset=utf-8'});
+  const escape=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  res.end('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Google diagnosztika</title><main style="font:16px system-ui;max-width:800px;margin:40px auto;padding:20px"><h1>Google Contacts kapcsolat – diagnosztika</h1><p>Csak olvasási teszt, nem ment névjegyet.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(JSON.stringify(report,null,2))+'</pre><a href="/">Vissza</a></main>');
+  return;
+ }
  if(url.pathname==='/google-test' && req.method==='POST'){
   const endpoint=process.env.GCONTACTS_SCRIPT_URL||'';
   const secret=process.env.GCONTACTS_SCRIPT_SECRET||'';
