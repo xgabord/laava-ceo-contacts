@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { scan, status, dashboard } from './worker.js';
 
 const port=Number(process.env.PORT||3005);
+let lastContactTest={status:'not_tested',time:null};
 function verify(req){
  const user=process.env.ADMIN_USER, pass=process.env.ADMIN_PASSWORD;
  if (!user || !pass || pass.length<16) return false;
@@ -66,6 +67,10 @@ const server=http.createServer(async (req,res)=>{
   }catch(err){res.writeHead(502,{'content-type':'application/json'});res.end(JSON.stringify({ok:false,error:String(err.message||err).slice(0,120)}))}
   return;
  }
+ if(url.pathname==='/google-test-history' && req.method==='GET'){
+  res.writeHead(200,{'content-type':'application/json'});
+  res.end(JSON.stringify(lastContactTest));return;
+ }
  if(url.pathname==='/google-contact-test' && req.method==='POST'){
   if(req.headers.origin && req.headers.origin!==('https://'+req.headers.host)){
    res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({ok:false,error:'Invalid origin'}));return;
@@ -84,9 +89,11 @@ const server=http.createServer(async (req,res)=>{
     throw Error('Hiányzó jóváhagyás vagy hibás adatok');
    const reply=await fetch(endpoint,{method:'POST',headers:{'content-type':'text/plain;charset=utf-8'},body:JSON.stringify({secret,contact}),signal:AbortSignal.timeout(25000)});
    const result=await reply.json();
+   lastContactTest={time:new Date().toISOString(),status:result.status||'unknown',ok:Boolean(result.ok),error:result.error||null};
    res.writeHead(result.ok?200:502,{'content-type':'application/json'});
    res.end(JSON.stringify({ok:!!result.ok,status:result.status||null,error:result.error||null}));
   }catch(err){
+   lastContactTest={time:new Date().toISOString(),status:'error',ok:false,error:String(err.message||err).slice(0,120)};
    res.writeHead(400,{'content-type':'application/json'});
    res.end(JSON.stringify({ok:false,error:String(err.message||err).slice(0,120)}));
   }
