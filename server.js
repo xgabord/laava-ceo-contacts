@@ -36,7 +36,7 @@ const server=http.createServer(async (req,res)=>{
   try{
    const reply=await fetch(endpoint,{method:'POST',headers:{'content-type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'ping',secret}),signal:AbortSignal.timeout(20000)});
    const raw=await reply.text();
-   let data;try{data=JSON.parse(raw)}catch{throw new Error('Google Script returned non-JSON response')}
+   let data;try{data=JSON.parse(raw)}catch{const finalHost=new URL(reply.url).hostname;res.writeHead(502,{'content-type':'application/json'});res.end(JSON.stringify({ok:false,error:'Google Script nem JSON választ adott',googleHttpStatus:reply.status,googleHost:finalHost,contentType:reply.headers.get('content-type')||'unknown'}));return}
    res.writeHead(data.ok?200:502,{'content-type':'application/json'});
    res.end(JSON.stringify({ok:Boolean(data.ok),peopleApi:Boolean(data.peopleApi),status:data.status||null,error:data.error||null}));
   }catch(err){res.writeHead(502,{'content-type':'application/json'});res.end(JSON.stringify({ok:false,error:String(err.message||err).slice(0,120)}))}
