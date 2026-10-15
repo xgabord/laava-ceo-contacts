@@ -30,13 +30,14 @@ function exists_(email, phone) {
   let token='';
   do {
     const r=api_('people/me/connections?personFields=emailAddresses,phoneNumbers&pageSize=1000'+(token?'&pageToken='+encodeURIComponent(token):''));
-    if((r.connections||[]).some(p=>
+    const found=(r.connections||[]).find(p=>
       (p.emailAddresses||[]).some(e=>String(e.value||'').toLowerCase()===email)||
       (p.phoneNumbers||[]).some(n=>e164_(n.canonicalForm||n.value)===phone)
-    ))return true;
+    );
+    if(found)return found.resourceName;
     token=r.nextPageToken||'';
   }while(token);
-  return false;
+  return null;
 }
 function cursor_(data) {
   const props=PropertiesService.getScriptProperties();
@@ -76,7 +77,11 @@ function doPost(e) {
     const phone=e164_(c.phone);
     const name=String(c.name||'').trim();
     if(!email.includes('@')||!/^\+\d{7,15}$/.test(phone)||name.length<5)return out_({ok:false,error:'invalid_contact'});
-    if(exists_(email,phone))return out_({ok:true,status:'exists'});
+    const existing=exists_(email,phone);
+    if(existing){
+      api_('contactGroups/'+encodeURIComponent(group_().split('/').pop())+'/members:modify','post',{resourceNamesToAdd:[existing]});
+      return out_({ok:true,status:'exists'});
+    }
     const person=api_('people:createContact?personFields=names,emailAddresses,phoneNumbers,organizations','post',{
       names:[{unstructuredName:name}],
       emailAddresses:[{value:email}],
