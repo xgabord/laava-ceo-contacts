@@ -21,7 +21,7 @@ const server=http.createServer(async (req,res)=>{
  res.setHeader('X-Frame-Options','DENY');
  if(url.pathname==='/health'){
   res.writeHead(200,{'content-type':'application/json'});
-  res.end(JSON.stringify({ok:true,service:'laava-ceo-contacts',version:'0.2.0',mode:process.env.GCONTACTS_SYNC_ENABLED==='true'?'google-contacts':'dry-run'}));return;
+  res.end(JSON.stringify({ok:true,service:'laava-ceo-contacts',version:'0.3.0',mode:process.env.GCONTACTS_SYNC_ENABLED==='true'?'google-contacts':'dry-run'}));return;
  }
  if(!verify(req)){
   res.writeHead(process.env.ADMIN_PASSWORD?401:503,{'content-type':'text/plain','WWW-Authenticate':'Basic realm="CEO Contacts"'});
