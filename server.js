@@ -66,6 +66,32 @@ const server=http.createServer(async (req,res)=>{
   }catch(err){res.writeHead(502,{'content-type':'application/json'});res.end(JSON.stringify({ok:false,error:String(err.message||err).slice(0,120)}))}
   return;
  }
+ if(url.pathname==='/google-contact-test' && req.method==='POST'){
+  if(req.headers.origin && req.headers.origin!==('https://'+req.headers.host)){
+   res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({ok:false,error:'Invalid origin'}));return;
+  }
+  const endpoint=process.env.GCONTACTS_SCRIPT_URL||'',secret=process.env.GCONTACTS_SCRIPT_SECRET||'';
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint)||secret.length<32){
+   res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({ok:false,error:'Google kapcsolat nincs konfigurálva'}));return;
+  }
+  try{
+   let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)throw Error('Too much data')}
+   const input=JSON.parse(raw),contact={
+    name:String(input.name||'').trim(),email:String(input.email||'').trim().toLowerCase(),
+    phone:String(input.phone||'').trim(),company:String(input.company||'').trim()
+   };
+   if(!input.confirm||!/^.{5,90}$/u.test(contact.name)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)||!/^\+\d{7,15}$/.test(contact.phone)||contact.company.length>120)
+    throw Error('Hiányzó jóváhagyás vagy hibás adatok');
+   const reply=await fetch(endpoint,{method:'POST',headers:{'content-type':'text/plain;charset=utf-8'},body:JSON.stringify({secret,contact}),signal:AbortSignal.timeout(25000)});
+   const result=await reply.json();
+   res.writeHead(result.ok?200:502,{'content-type':'application/json'});
+   res.end(JSON.stringify({ok:!!result.ok,status:result.status||null,error:result.error||null}));
+  }catch(err){
+   res.writeHead(400,{'content-type':'application/json'});
+   res.end(JSON.stringify({ok:false,error:String(err.message||err).slice(0,120)}));
+  }
+  return;
+ }
  if(url.pathname==='/status'){
   res.writeHead(200,{'content-type':'application/json'});
   res.end(JSON.stringify(status()));return;
