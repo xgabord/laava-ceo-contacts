@@ -38,6 +38,27 @@ function exists_(email, phone) {
   }while(token);
   return false;
 }
+function cursor_(data) {
+  const props=PropertiesService.getScriptProperties();
+  const key='CEO_IMAP_CURSOR_V1';
+  if(data.action==='cursor_get'){
+    const raw=props.getProperty(key);
+    return out_({ok:true,status:'cursor',cursor:raw?JSON.parse(raw):null});
+  }
+  if(data.action==='cursor_set'){
+    const c=data.cursor||{};
+    const validity=Number(c.uidValidity),next=Number(c.nextUid);
+    if(!Number.isSafeInteger(validity)||validity<1||!Number.isSafeInteger(next)||next<1)
+      return out_({ok:false,error:'invalid_cursor'});
+    const prevRaw=props.getProperty(key);
+    const prev=prevRaw?JSON.parse(prevRaw):null;
+    if(prev && prev.uidValidity===validity && next<prev.nextUid)
+      return out_({ok:false,error:'cursor_regression'});
+    const state={uidValidity:validity,nextUid:next,updatedAt:new Date().toISOString()};
+    props.setProperty(key,JSON.stringify(state));
+    return out_({ok:true,status:'cursor_saved',cursor:state});
+  }
+}
 function doPost(e) {
   const lock=LockService.getScriptLock();
   try {
@@ -49,6 +70,7 @@ function doPost(e) {
       const info=api_('contactGroups?pageSize=1');
       return out_({ok:true,status:'connected',peopleApi:true});
     }
+    if(data.action==='cursor_get'||data.action==='cursor_set')return cursor_(data);
     const c=data.contact||{};
     const email=String(c.email||'').trim().toLowerCase();
     const phone=e164_(c.phone);
