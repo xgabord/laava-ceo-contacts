@@ -9,7 +9,7 @@ async function sendToGoogle(contact) {
  const endpoint=process.env.GCONTACTS_SCRIPT_URL;
  const secret=process.env.GCONTACTS_SCRIPT_SECRET;
  if(!/^https:\/\/script\.google\.com\/macros\/s\//.test(endpoint||'')||!secret||secret.length<32)throw Error('Google Script URL or secret missing');
- const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret,contact}),signal:AbortSignal.timeout(20000)});
+ const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({secret,contact}),signal:AbortSignal.timeout(20000)});
  const json=await response.json();
  if(!response.ok||!json.ok)throw Error('Google sync: '+String(json.error||response.status));
  return json.status;
