@@ -60,6 +60,28 @@ function cursor_(data) {
     return out_({ok:true,status:'cursor_saved',cursor:state});
   }
 }
+function history_(data) {
+  const props=PropertiesService.getScriptProperties();
+  const indexKey='CEO_CONTACT_HISTORY_INDEX_V1';
+  if(data.action==='history_get'){
+    const keys=JSON.parse(props.getProperty(indexKey)||'[]');
+    return out_({ok:true,status:'history',items:keys.map(k=>{
+      try{return JSON.parse(props.getProperty(k)||'null');}catch(_){return null;}
+    }).filter(Boolean).reverse()});
+  }
+  return out_({ok:false,error:'unknown_action'});
+}
+function record_(contact,result){
+  const props=PropertiesService.getScriptProperties();
+  const key='CEO_CONTACT_HISTORY_'+Utilities.getUuid();
+  const item={time:new Date().toISOString(),name:contact.name,email:contact.email,phone:contact.phone,company:contact.company||'',status:result};
+  props.setProperty(key,JSON.stringify(item));
+  const indexKey='CEO_CONTACT_HISTORY_INDEX_V1';
+  const keys=JSON.parse(props.getProperty(indexKey)||'[]');
+  keys.push(key);
+  while(keys.length>100){props.deleteProperty(keys.shift());}
+  props.setProperty(indexKey,JSON.stringify(keys));
+}
 function doPost(e) {
   const lock=LockService.getScriptLock();
   try {
@@ -72,6 +94,7 @@ function doPost(e) {
       return out_({ok:true,status:'connected',peopleApi:true});
     }
     if(data.action==='cursor_get'||data.action==='cursor_set')return cursor_(data);
+    if(data.action==='history_get')return history_(data);
     const c=data.contact||{};
     const email=String(c.email||'').trim().toLowerCase();
     const phone=e164_(c.phone);
@@ -80,6 +103,7 @@ function doPost(e) {
     const existing=exists_(email,phone);
     if(existing){
       api_('contactGroups/'+encodeURIComponent(group_().split('/').pop())+'/members:modify','post',{resourceNamesToAdd:[existing]});
+      record_({name,email,phone,company:String(c.company||'')},'exists');
       return out_({ok:true,status:'exists'});
     }
     const person=api_('people:createContact?personFields=names,emailAddresses,phoneNumbers,organizations','post',{
@@ -89,6 +113,7 @@ function doPost(e) {
       organizations:c.company?[{name:String(c.company).slice(0,120)}]:[]
     });
     api_('contactGroups/'+encodeURIComponent(group_().split('/').pop())+'/members:modify','post',{resourceNamesToAdd:[person.resourceName]});
+    record_({name,email,phone,company:String(c.company||'')},'created');
     return out_({ok:true,status:'created'});
   } catch(err){console.error(String(err).slice(0,400));return out_({ok:false,error:'server_error'});}
   finally{try{lock.releaseLock();}catch(_){}}
